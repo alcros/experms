@@ -80,16 +80,16 @@ find /var/exports/ -type d | wc -l
 
 
 ========================================================================================
- ++ CRONEXPERMS.SH ++
+ ++ CRONEXPERMS ++
 ========================================================================================
-cronexperms.sh is an experms-script for cron. It checkes if Experms is running.
+cronexperms is an experms-script for cron. It checkes if Experms is running.
 If not it starts it.
 
 You can let cron run this script (e.g. every 5 minutes) in order to make sure Experms
 is running permanentely.
 
 Example for crontab:
-*/5 * * * * /your/path/to/cronexperms.sh
+*/5 * * * * /usr/bin/cronexperms
 
 
 ========================================================================================
@@ -109,8 +109,10 @@ Experms will process all the containing files with a delay of 1 second.
  ++ FILES ++
 ========================================================================================
 For the moment all the related files lie in the directory of the scripts itself.
-Exception: /tmp/perms_pid.sfhsfhi
-NOTE: You can move ./experms.conf to /etc/ if you wish to.
+
+Exceptions:
+/etc/experms.conf
+/tmp/perms_pid.sfhsfhi
 
 If executed as root, the scripts as well as the config-file should remain writable
 only for root.
@@ -121,7 +123,7 @@ List of files:
 ./experms.conf
 ./check-config.sh
 ./daemon-functions.sh
-./cronexperms.sh
+./cronexperms
 ./COPYING
 ./README
 
