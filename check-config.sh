@@ -14,7 +14,7 @@
 
 ##===========================================================================================================================
 ##
-##         FILE: check-conf.sh
+##         FILE: check-config.sh
 ##
 ##  DESCRIPTION: 1) Check if the config-file is available. If not, abort with a message.
 ##               2) Check if the config-file was edited. If not, abort with a message.
@@ -26,7 +26,7 @@
 ##
 ##       AUTHOR: fabio@dynamix-tontechnik.ch
 ##
-##      VERSION: 0.1
+##      VERSION: 0.0.2
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -53,18 +53,23 @@
 ##
 ##===========================================================================================================================
 
-
 # Path to config-file
-if [ -e "/etc/experms.conf" ]
-then
-    configfile="/etc/experms.conf"
-elif [ -e "$MY_ROOT/experms.conf" ]
-then
-    configfile="$MY_ROOT/experms.conf"
+if [ "$USER" == "root" ]; then
+    if [ -e "/etc/experms.conf" ]; then
+        configfile="/etc/experms.conf"
+    else
+        echo "Was not able to find the configuration file /etc/experms.conf!" >&2
+        exit 1
+    fi
 else
-    echo """Was not able to find a configuration file!
-Make sure there is one available and readable (either /etc/experms.conf or /path/of/experms/experms.conf).""" >&2
-    exit 1
+    if [ -e "/home/$USER/experms.conf" ]; then
+        configfile="/home/$USER/experms.conf"
+    elif [ -e "/home/$USER/.experms.conf" ]; then
+        configfile="/home/$USER/.experms.conf"
+    else
+        echo "Was not able to find the configuration file /home/$USER/experms.conf or /home/$USER/.experms.conf!" >&2
+        exit 1
+    fi
 fi
 rm -f /tmp/experms.conf
 configfile_secured="/tmp/experms.conf"
