@@ -55,16 +55,16 @@
 
 # Path to config-file
 if [ "$USER" == "root" ]; then
-    if [ -e "/etc/experms.conf" ]; then
+    if [ -f "/etc/experms.conf" ]; then
         configfile="/etc/experms.conf"
     else
         echo "Was not able to find the configuration file /etc/experms.conf!" >&2
         exit 1
     fi
 else
-    if [ -e "/home/$USER/experms.conf" ]; then
+    if [ -f "/home/$USER/experms.conf" ]; then
         configfile="/home/$USER/experms.conf"
-    elif [ -e "/home/$USER/.experms.conf" ]; then
+    elif [ -f "/home/$USER/.experms.conf" ]; then
         configfile="/home/$USER/.experms.conf"
     else
         echo "Was not able to find the configuration file /home/$USER/experms.conf or /home/$USER/.experms.conf!" >&2
