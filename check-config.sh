@@ -219,7 +219,7 @@ fi
 
 # Check if there are the necessary permissions on all monitored files. If not satisfied, abort with an error-message.
 if [ $USER != root ]; then
-    if [ ${subdirown[@]} -ne 0 ]; then
+    if [ ${#subdirown[@]} -ne 0 ]; then
         echo "chown
 Based on your settings in the configuration-file you need to run experms with root-permissions.
 Experms will abort now!" >&2
