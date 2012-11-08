@@ -67,7 +67,9 @@ monitored files.
 NOTE: If a file is modified from another user, it maybe changes it's ownership.
       In this case, Experms would print an error-message if executed as non-root user.
 
-To start Experms as non-root user, you need to make a copy of the config-file /etc/experms.conf in your home-directory. This copy can also be .experms.conf in order to hide it.
+To start Experms as non-root user, you need to make a copy of the config-file
+/etc/experms.conf in your home-directory.
+This copy can also be .experms.conf in order to hide it.
 
 
 ========================================================================================
