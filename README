@@ -76,7 +76,7 @@ Inotifywait allows only a limited number of directories to watch per user.
 Per default this is set to 8192.
 You can increase this number by writing to /proc/sys/fs/inotify/max_user_watches
 You can check the number of directories recursively with:
-find /var/exports/ -type d | wc -l
+find /your/directory/ -type d | wc -l
 
 
 ========================================================================================
