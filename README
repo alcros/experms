@@ -9,7 +9,7 @@
                     // //    \  //\  //\  //\  //\  //\  //    \  \
                     \_//      \//  \//  \//  \//  \//  \//      \_//
 
-                                   version 0.0.2 - 2012
+                                   version 0.1 - 2012
 
                               Distributed under the GNU GPL
                          http://www.gnu.org/licenses/gpl-3.0.txt
@@ -64,7 +64,7 @@ It's possible to run Experms as non-root user. But there are quiet a few restict
 If you want to run Experms as non-root user, make sure you are the owner of all
 monitored files.
 
-NOTE: If a file is modified from another user, it maybe changes it's ownership.
+NOTE: If a file is modified by another user, it maybe changes it's ownership.
       In this case, Experms would print an error-message if executed as non-root user.
 
 To start Experms as non-root user, you need to make a copy of the config-file
@@ -81,19 +81,6 @@ Per default this is set to 8192.
 You can increase this number by writing to /proc/sys/fs/inotify/max_user_watches
 You can check the number of directories recursively with:
 find /your/directory/ -type d | wc -l
-
-
-========================================================================================
- ++ CRONEXPERMS ++
-========================================================================================
-cronexperms is an experms-script for cron. It checkes if Experms is running.
-If not it starts it.
-
-You can let cron run this script (e.g. every 5 minutes) in order to make sure Experms
-is running permanentely.
-
-Example for crontab:
-*/5 * * * * /usr/bin/cronexperms
 
 
 ========================================================================================
@@ -127,7 +114,7 @@ List of files:
 ./experms.conf
 ./check-config.sh
 ./daemon-functions.sh
-./cronexperms
+./experms.1.gz
 ./COPYING
 ./README
 

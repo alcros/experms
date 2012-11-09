@@ -26,7 +26,7 @@
 ##
 ##       AUTHOR: fabio@dynamix-tontechnik.ch
 ##
-##      VERSION: 0.0.2
+##      VERSION: 0.1
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -48,8 +48,6 @@
 ##               along with Experms.  If not, see <http://www.gnu.org/licenses/>.
 ##
 ##      CREATED: 2012
-##
-##     REVISION: ---
 ##
 ##===========================================================================================================================
 
