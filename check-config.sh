@@ -24,9 +24,9 @@
 ##               5) Check - based on the config-file - what changes has to happen in which directory and remember it
 ##                  as an octal value.
 ##
-##       AUTHOR: fabio@dynamix-tontechnik.ch
+##       AUTHOR: fabio(a)dynamix-tontechnik.ch
 ##
-##      VERSION: 0.1
+##      VERSION: 0.2
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt

@@ -3,6 +3,7 @@
 ## ################################ ##
 ##                                  ##
 ## daemon-functions.sh VERSION 0.1a ##
+## experms VERSION 0.2              ##
 ##                                  ##
 ## ################################ ##
 
@@ -88,8 +89,14 @@ case $1 in
             exit 0
         fi
         if [ -f $MY_PIDFILE ]; then
-            echo "Experms is already running"
-            exit 0
+            if ps -Ao pid,fname | egrep "^$(cat $MY_PIDFILE) " | egrep -q "$MY_NAME"; then
+                echo "Experms is already running"
+                exit 0
+            else
+                rm $MY_PIDFILE
+                rm -f /tmp/experms.conf
+                rm -f /tmp/perms_pid.sfhsfhi
+            fi
         fi
         if [ "$restore_at_start" == "yes" ]
         then
@@ -136,11 +143,7 @@ case $1 in
             fi
             exit 0
         else
-            if [ -f /tmp/perms_pid.sfhsfhi ]; then
-                inotifypid=$(cat /tmp/perms_pid.sfhsfhi)
-                echo "inotifywait is running with PID $inotifypid"
-            fi
-            echo "$MY_NAME is not running (PIDFILE mismatch)"
+            echo "$MY_NAME is not running"
             exit 1
         fi
         ;;
