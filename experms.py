@@ -12,7 +12,7 @@
 ##  // //    \  //\  //\  //\  //\  //\  //    \  \
 ##  \_//      \//  \//  \//  \//  \//  \//      \_//
 ##
-##                 version 0.4 - 2013
+##                 version 0.5 - 2013
 ##
 
 ##=================================================================================================================================
@@ -37,7 +37,7 @@
 ##
 ##       AUTHOR: Fabio Rämi - fabio(a)dynamix-tontechnik.ch
 ##
-##      VERSION: 0.4
+##      VERSION: 0.5
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -296,12 +296,16 @@ def action(directory, event, ruledir, restore):
   # if owner or group is not set in the config, use the actual ones
   if config.doit[ruledir] == 1 or config.doit[ruledir] == 3 or config.doit[ruledir] == 5 or config.doit[ruledir] == 7:
     if config.owner[ruledir] == -1:
-      config.owner[ruledir] = actperms[0]
+      realowner = actperms[0]
+    else:
+      realowner = config.owner[ruledir]
     if config.group[ruledir] == -1:
-      config.group[ruledir] = actperms[1]
-    if not actperms[0] == config.owner[ruledir] or not actperms[1] == config.group[ruledir]:
+      realgroup = actperms[1]
+    else:
+      realgroup = config.group[ruledir]
+    if not actperms[0] == realowner or not actperms[1] == realgroup:
       try:
-        os.lchown(directory, config.owner[ruledir], config.group[ruledir])
+        os.lchown(directory, realowner, realgroup)
       except OSError, e:
         if e.errno == 13:
           print >> sys.stderr, strftime("%Y-%m-%d_%H:%M:%S", localtime()), "Permission denied for '" + directory + "'."

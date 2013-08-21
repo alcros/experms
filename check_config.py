@@ -12,7 +12,7 @@
 ##  // //    \  //\  //\  //\  //\  //\  //    \  \
 ##  \_//      \//  \//  \//  \//  \//  \//      \_//
 ##
-##                 version 0.4 - 2013
+##                 version 0.5 - 2013
 ##
 
 
@@ -24,7 +24,7 @@
 ##
 ##       AUTHOR: Fabio Rämi - fabio(a)dynamix-tontechnik.ch
 ##
-##      VERSION: 0.4
+##      VERSION: 0.5
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
