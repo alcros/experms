@@ -12,7 +12,7 @@
 ##  // //    \  //\  //\  //\  //\  //\  //    \  \
 ##  \_//      \//  \//  \//  \//  \//  \//      \_//
 ##
-##                 version 0.3 - 2013
+##                 version 0.4 - 2013
 ##
 
 ##=================================================================================================================================
@@ -37,7 +37,7 @@
 ##
 ##       AUTHOR: Fabio Rämi - fabio(a)dynamix-tontechnik.ch
 ##
-##      VERSION: 0.3
+##      VERSION: 0.4
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -247,17 +247,17 @@ def collect_filenames():
     doappend = True
     for thing in config.dirname:
       if not item == thing:
-        p = re.compile('^' + thing)
+        p = re.compile('^' + thing + '/')
         if p.search(item):
           doappend = False
           break
     if doappend == True:
       realdirs.append(item)
-  
+
+  matchesfile = []
+  matchesdir = []
+  matchesall = []
   for item in realdirs:
-    matchesfile = []
-    matchesdir = []
-    matchesall = []
     for root, dirnames, filenames in os.walk(item):
       for filename in filenames:
         filenamewrite = os.path.join(root, filename)

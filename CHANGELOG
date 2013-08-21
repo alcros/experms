@@ -1,5 +1,8 @@
 Experms changelog
 
+Version 0.4
+ - 2013-08-21 - Fixed a bug that prevented 'restore' and 'dircount' from working
+
 Version 0.3
  - 2013-08-21 - Rewrote the whole thing in Python. Nothing is the same as before ;-)
      Advantages:
