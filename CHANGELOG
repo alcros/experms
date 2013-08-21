@@ -1,3 +1,15 @@
 Experms changelog
 
+Version 0.3
+ - 2013-08-21 - Rewrote the whole thing in Python. Nothing is the same as before ;-)
+     Advantages:
+      - doesn't crash ;-)
+      - much faster
+      - more lightweight
+      - handle nested directories
+      - exclude files and folders
+      - exclude files based on a pattern (regex)
+      - more intuitive configuration
+
+Version 0.2
  - 2013-01-26 - Fixed the annoying bug that prevented Experms from being started again after a reboot or crash
