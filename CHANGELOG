@@ -1,21 +1,25 @@
 Experms changelog
 
-Version 0.5
- - 2013-08-21 - Fixed a bug that prevented taking the actual owner and group id not definded in the config
+Version 0.6 - 2013-08-22
+ - Handle symlinks: Use owner- and group-rules for the link itself and not for the target-file. Do not chmod.
+ - Make it possible to mixup the order of the 'general'- and directory-sections.
 
-Version 0.4
- - 2013-08-21 - Fixed a bug that prevented 'restore' and 'dircount' from working
+Version 0.5 - 2013-08-21
+ - Fixed a bug that prevented taking the actual owner and group id not definded in the config
 
-Version 0.3
- - 2013-08-21 - Rewrote the whole thing in Python. Nothing is the same as before ;-)
-     Advantages:
-      - doesn't crash ;-)
-      - much faster
-      - more lightweight
-      - handle nested directories
-      - exclude files and folders
-      - exclude files based on a pattern (regex)
-      - more intuitive configuration
+Version 0.4 - 2013-08-21
+ - Fixed a bug that prevented 'restore' and 'dircount' from working
 
-Version 0.2
- - 2013-01-26 - Fixed the annoying bug that prevented Experms from being started again after a reboot or crash
+Version 0.3 - 2013-08-21
+- Rewrote the whole thing in Python. Nothing is the same as before ;-)
+    Advantages:
+    - doesn't crash ;-)
+    - much faster
+    - more lightweight
+    - handle nested directories
+    - exclude files and folders
+    - exclude files based on a pattern (regex)
+    - more intuitive configuration
+
+Version 0.2 - 2013-01-26
+- Fixed the annoying bug that prevented Experms from being started again after a reboot or crash

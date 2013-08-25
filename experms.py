@@ -12,7 +12,7 @@
 ##  // //    \  //\  //\  //\  //\  //\  //    \  \
 ##  \_//      \//  \//  \//  \//  \//  \//      \_//
 ##
-##                 version 0.5 - 2013
+##                 version 0.6 - 2013
 ##
 
 ##=================================================================================================================================
@@ -37,7 +37,7 @@
 ##
 ##       AUTHOR: Fabio Rämi - fabio(a)dynamix-tontechnik.ch
 ##
-##      VERSION: 0.5
+##      VERSION: 0.6
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -96,6 +96,7 @@ class MyDaemon(Daemon):
     except IOError:
       pid = None
 
+    # check with PID if experms really is running
     if pid:
       if checkpid(pid) == True:
         message = "pidfile %s already exist. Experms already running?\n"
@@ -281,7 +282,8 @@ def restore():
 def action(directory, event, ruledir, restore):
   
   try:
-    actpermsraw = os.stat(directory)
+    # use os.lstat instead of os.stat in order to not following symlinks
+    actpermsraw = os.lstat(directory)
   except OSError, e:
     if e.errno == 13:
       print >> sys.stderr, strftime("%Y-%m-%d_%H:%M:%S", localtime()), "Permission denied for '" + directory + "'."
@@ -317,7 +319,7 @@ def action(directory, event, ruledir, restore):
         changed = True
 
   if config.doit[ruledir] == 2 or config.doit[ruledir] == 3 or config.doit[ruledir] == 6 or config.doit[ruledir] == 7:
-    if os.path.isfile(directory):
+    if os.path.isfile(directory) and not os.path.islink(directory):
       if not int(actperms[2], 8) == config.chmodf[ruledir]:
         try:
           os.chmod(directory, config.chmodf[ruledir])
@@ -330,10 +332,9 @@ def action(directory, event, ruledir, restore):
             #print >> sys.stderr, directory, " doesn't exist."
         else:
           changed = True
-        changed = True
 
   if config.doit[ruledir] == 4 or config.doit[ruledir] == 5 or config.doit[ruledir] == 6 or config.doit[ruledir] == 7:
-    if os.path.isdir(directory):
+    if os.path.isdir(directory) and not os.path.islink(directory):
       if not int(actperms[2], 8) == config.chmodd[ruledir]:
         try:
           os.chmod(directory, config.chmodd[ruledir])

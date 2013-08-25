@@ -12,7 +12,7 @@
 ##  // //    \  //\  //\  //\  //\  //\  //    \  \
 ##  \_//      \//  \//  \//  \//  \//  \//      \_//
 ##
-##                 version 0.5 - 2013
+##                 version 0.6 - 2013
 ##
 
 
@@ -24,7 +24,7 @@
 ##
 ##       AUTHOR: Fabio Rämi - fabio(a)dynamix-tontechnik.ch
 ##
-##      VERSION: 0.5
+##      VERSION: 0.6
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -134,7 +134,6 @@ class Check(object):
     except MissingSectionHeaderError:
       pass
 
-    
     if parser.has_section('general'):
       if debugvar == True:
         print "'general' was found"
@@ -185,19 +184,18 @@ class Check(object):
 
 
     self.sectionname = []
-    for number, i in enumerate(parser.sections()):
+    # can't use enumerate here, to make it possible to mixup the order between general and directory sections in the config
+    number = -1
+    for i in parser.sections():
       if i == 'general':
         continue
+      number = number + 1
       self.sectionname.append(i)
-      number = number - 1
       usowchmoderr = True
       self.doit.append('')
       
       if parser.has_option(i, dirname):
         self.dirname.append('')
-        if parser.get(i, dirname).rstrip('/') in self.dirname:
-          print >> sys.stderr, "Error in section", i + ": 'path' already exists in another section."
-          errorsoccured = True
         self.dirname[number] = parser.get(i, dirname).rstrip('/')
         if self.dirname[number] == '':
           print >> sys.stderr, "Error in section", i + ": 'path' is empty.\nIf you have started experms for the first time, please edit the configfile first (usually /etc/experms.conf)"
