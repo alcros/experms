@@ -3,13 +3,13 @@
                           //  \//  \//  \//  \//  \//  \//  \
                          //    _   _   _   _   _   _   _     \
                         //    / \ / \ / \ / \ / \ / \ / \     \
-                       // Ⓐ  ( E ) X ) P ) E ) R ) M ) S )  Ⓐ  \ 
+                       //    ( E ) X ) P ) E ) R ) M ) S )     \ 
                       //  __  \_/ \_/ \_/ \_/ \_/ \_/ \_/   __  \
                      // //  \                             //  \  \
                     // //    \  //\  //\  //\  //\  //\  //    \  \
                     \_//      \//  \//  \//  \//  \//  \//      \_//
 
-                                   version 0.6 - 2013
+                                   version 0.7 - 2013
 
                               Distributed under the GNU GPL
                          http://www.gnu.org/licenses/gpl-3.0.txt
@@ -39,8 +39,10 @@ Runs as daemon and monitors file-changes happened in the directory set in experm
 If changes happened, it adjusts the file-permissions and ownership/group.
 You can either define one directory, or several sub-directories with different
 ownerships and permissions.
+It also allows exclusions based on directories or patterns (regex).
 Further it is able to restore all the ownerships and permissions of all files based on
 the config-file.
+experms supports multiple instances, but only one per user.
 
 
 ========================================================================================
@@ -50,28 +52,32 @@ experms depends on:
 
  - python2
  - python2-pyinotify (name can vary on different Linux distributions)
+ - python2-psutil (name can vary on different Linux distributions)
 
 
 ========================================================================================
  ++ USAGE ++
 ========================================================================================
-experms [ start | stop | restart | restore | status | log | err | dircount | (help|-h|--help) | foreground ]
+experms [ start | stop | restart | restore | status | log | err | dircount | 
+(help|-h|--help) | version | foreground | debug [file] ]
 
 
       Explanation:
 
-            start: Start Experms
-             stop: Stop Experms
-          restart: Restart Experms
+            start: Start experms
+             stop: Stop experms
+          restart: Restart experms
           restore: Restore the ownership and permissions of all files in the monitored
                    directory
-           status: Displays status and if available PID of Experms
+           status: Displays status and if available PID of experms
               log: Display the log-entries in real-time
               err: Display the error-log-entries in real-time
          dircount: Displays the amount of directories being watched with actual
                    configuration. Useful to configure inotify
    help|-h|--help: Display a short help
-       foreground: Start Experms in the foreground. Useful to test a configuration
+          version: Displays the version of experms
+       foreground: Start experms in the foreground. Useful to test a configuration
+     debug [file]: Start experms in the foreground with much more output
 
 NOTE: YOU NEED TO EDIT THE CONFIGURATION FILE BEFORE RUNNING EXPERMS THE FIRST TIME!
 
@@ -79,10 +85,9 @@ NOTE: YOU NEED TO EDIT THE CONFIGURATION FILE BEFORE RUNNING EXPERMS THE FIRST T
 ========================================================================================
  ++ THE CONFIGURATION FILE ++
 ========================================================================================
-experms.conf is usually located under /etc/experms.conf. If using
-experms as non-root-user (see 'man experms'), it is recommended to  put
-experms.conf in the home-directory. This is also possible as
-/home/USER/.experms.conf.
+experms.conf is located under /etc/experms.conf. If you want to use experms as non-root
+user (see 'man experms'), you need to make a copy of experms.conf in your
+home-directory. It is also possible to hide the file (.experms.conf).
 
 If changes happened to experms.conf, it is necessary to restart
 experms: 'experms restart'.
@@ -98,7 +103,7 @@ EXAMPLE:
 log_activities = no
 restore = no
 
-[default]
+[DEFAULT]
 chmodd = 755
 
 [directory_1]
@@ -124,9 +129,9 @@ log_activities = yes | no
    accessed with 'experms log'.
 
 restore = yes | no
-   Decide, if experms should restore all the rules on all configured
-   files at start, in case there were changes while experms was not
-   running.
+   Decide, if experms should restore all the ownerships and permissions
+   of all files based on the config-file. In case there were changes
+   while experms was not running.
 
 =================
 DEFAULT SECTION:
@@ -162,31 +167,35 @@ excludepattern = regular expression
 ========================================================================================
  ++ RUNNING EXPERMS AS NON-ROOT USER ++
 ========================================================================================
-It's possible to run Experms as non-root user. But there are quiet a few restictions:
+It's possible to run experms as non-root user. But there are quiet a few restictions:
 
  - Only root is able to change the owner of a file.
  - Only the owner of a file or root is able to change the group of a file.
  - Only the owner of a file or root is able to change the permissions of a file.
 
-If you want to run Experms as non-root user, make sure you are the owner of all
+If you want to run experms as non-root user, make sure you are the owner of all
 monitored files.
 
 NOTE: If a file is modified by another user, it maybe changes it's ownership.
-      In this case, Experms would print a message to the error-log if executed as
+      In this case, experms would print a message to the error-log if executed as
       non\-root user.
 
-If you want to use Experms as non\-root user, is it recommended to make a copy of 
-experms.conf in your home-directory. It is also possible to hide the file
+If you want to use experms as non-root user (See 'man experms'), you need to make a copy
+of experms.conf in your home-directory. It is also possible to hide the file
 (.experms.conf).
 
 
 ========================================================================================
  ++ INOTIFY CONFIGURATION ++
 ========================================================================================
-Experms uses inotify to monitor the directories.
+experms uses inotify to monitor the directories.
 Inotify allows only a limited number of directories to watch per user.
 Per default this is set to 8192.
 You can increase this number by writing to /proc/sys/fs/inotify/max_user_watches
+To make this change permanent, the following line should be added to /etc/sysctl.conf
+or /etc/sysctl.d/99-sysctl.conf
+fs.inotify.max_user_watches=8192 (your amount of directories)
+
 You can check the amount of directories recursively with:
 
 'experms dircount'
@@ -195,33 +204,27 @@ You can check the amount of directories recursively with:
 ========================================================================================
  ++ FILES ++
 ========================================================================================
-For the moment all the related files lie in the directory of the scripts itself.
-
-Exceptions:
-/etc/experms.conf
-/tmp/experms.pid
-/usr/share/man/man1/experms.1.gz
-
 If executed as root, the scripts as well as the config-file should remain writable
 only for root.
 
 List of files:
 
-./experms
+./experms.py
 /etc/experms.conf
 ./check_config.py
 ./daemon.py
 /usr/share/man/man1/experms.1.gz
+/usr/share/man/man5/experms.conf.5.gz
 ./COPYING
 ./README
 ./CHANGELOG
 
-If Experms was running at least once:
+If experms was running at least once:
 
-./experms.err
-./experms.log
+/var/log/experms.err
+/var/log/experms.log
 
 While Experms is running:
 
-/tmp/experms.pid
+/tmp/experms_UID.pid
 

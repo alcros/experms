@@ -1,11 +1,24 @@
 Experms changelog
 
+Version 0.7 - 2013-11-25
+ - Support multiple instances (one per user)
+ - The logs are written to /var/log/ if executed as root. If executed as normal user they lie in ~/
+ - The config-file needs to be in /etc/ if executed as root. If executed as normal user it needs to be in ~/
+ - Added 'debug' option
+ - On every start the amount of watched directories will be displayed as well as the amount of allowed directories to monitor (inotify)
+ - Errors during restore will be written to the error-log-file. A message will be printed.
+ - Switch to psutil for checking if process is running
+ - Added the possibility to display the version
+ - Fixes in the documentation
+ - Several Bugfixes
+ - Cleaning up
+
 Version 0.6 - 2013-08-22
  - Handle symlinks: Use owner- and group-rules for the link itself and not for the target-file. Do not chmod.
- - Make it possible to mixup the order of the 'general'- and directory-sections.
+ - Make it possible to mixup the order of the 'general'- and 'directory'-sections.
 
 Version 0.5 - 2013-08-21
- - Fixed a bug that prevented taking the actual owner and group id not definded in the config
+ - Fixed a bug that prevented taking the actual owner and group if not definded in the config
 
 Version 0.4 - 2013-08-21
  - Fixed a bug that prevented 'restore' and 'dircount' from working

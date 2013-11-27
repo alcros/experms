@@ -15,13 +15,16 @@ class Daemon:
                 self.stderr = stderr
                 self.pidfile = pidfile
         
-        # If the .log or .err file is deleted, redirect standard file descriptors again
+        # If the .log file is deleted, redirect standard file descriptors again
         def mknewlog(self):
-                si = file(self.stdin, 'r')
-                so = file(self.stdout, 'a+')
-                se = file(self.stderr, 'a+', 0)
-                os.dup2(si.fileno(), sys.stdin.fileno())
+                sys.stdout.flush()
+                so = os.fdopen(os.open(self.stdout, os.O_WRONLY | os.O_CREAT, 0644), 'a')
                 os.dup2(so.fileno(), sys.stdout.fileno())
+
+        # If the .err file is deleted, redirect standard file descriptors again
+        def mknewerr(self):
+                sys.stderr.flush()
+                se = os.fdopen(os.open(self.stderr, os.O_WRONLY | os.O_CREAT, 0644), 'a')
                 os.dup2(se.fileno(), sys.stderr.fileno())
                 
         def daemonize(self):
@@ -57,9 +60,9 @@ class Daemon:
                 # redirect standard file descriptors
                 sys.stdout.flush()
                 sys.stderr.flush()
-                si = file(self.stdin, 'r')
-                so = file(self.stdout, 'a+')
-                se = file(self.stderr, 'a+', 0)
+                si = os.fdopen(os.open(self.stdin, os.O_WRONLY | os.O_CREAT, 0644), 'a')
+                so = os.fdopen(os.open(self.stdout, os.O_WRONLY | os.O_CREAT, 0644), 'a')
+                se = os.fdopen(os.open(self.stderr, os.O_WRONLY | os.O_CREAT, 0644), 'a')
                 os.dup2(si.fileno(), sys.stdin.fileno())
                 os.dup2(so.fileno(), sys.stdout.fileno())
                 os.dup2(se.fileno(), sys.stderr.fileno())
@@ -67,7 +70,7 @@ class Daemon:
                 # write pidfile
                 atexit.register(self.delpid)
                 pid = str(os.getpid())
-                file(self.pidfile,'w+').write("%s\n" % pid)
+                os.fdopen(os.open(self.pidfile, os.O_WRONLY | os.O_CREAT, 0644), 'w').write("%s\n" % pid)
 
         def delpid(self):
                 os.remove(self.pidfile)

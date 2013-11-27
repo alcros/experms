@@ -12,7 +12,7 @@
 ##  // //    \  //\  //\  //\  //\  //\  //    \  \
 ##  \_//      \//  \//  \//  \//  \//  \//      \_//
 ##
-##                 version 0.6 - 2013
+##                 version 0.7 - 2013
 ##
 
 ##=================================================================================================================================
@@ -21,13 +21,18 @@
 ##
 ##        USAGE: experms.py [start|stop|restart|restore|status|log|err|dircount|-h|foreground]
 ##
-##  DESCRIPTION: Runs as daemon and monitors file-changes happened in the directory/directories set in experms.conf.
+##  DESCRIPTION: Runs as daemon and monitors file-changes happened in the directory set in experms.conf.
 ##               If changes happened, it adjusts the file-permissions and ownership/group.
-##               Further it is able to restore all the ownerships and permissions of all files based on the config-file.
+##               You can either define one directory, or several sub-directories with different
+##               ownerships and permissions.
+##               It also allows exclusions based on directories or patterns (regex).
+##               Further it is able to restore all the ownerships and permissions of all files based on
+##               the config-file.
+##               experms supports multiple instances, but only one per user.
 ##
 ##       CONFIG: experms.conf
 ##
-## REQUIREMENTS: python2, python2-pyinotify
+## REQUIREMENTS: python2, python2-pyinotify, python2-psutil
 ##
 ##        NOTES: Experms uses inotify to monitor the directories.
 ##               Inotify allows only a limited number of directories to watch per user. Per default this is set to 8192.
@@ -37,7 +42,7 @@
 ##
 ##       AUTHOR: Fabio Rämi - fabio(a)dynamix-tontechnik.ch
 ##
-##      VERSION: 0.6
+##      VERSION: 0.7
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -61,25 +66,43 @@
 ##=================================================================================================================================
 
 # bold: "\033[1m"
+# green: "\033[32;1m"
+# red: "\033[31;1m"
 # normal: "\033[0m"
 
 import sys
-import time
 import os
-import re
-from sys import stdout
-from time import localtime, strftime
+from re import compile as re_compile
+from time import localtime, strftime, sleep, time
 from daemon import Daemon
 import check_config
 try:
   import pyinotify
 except ImportError:
-  print >> sys.stderr, "Error: Module pyinotify not found. Please install the package 'python2-pyinotify'.\nMaybe this package is called differently in your distribution (e.g. python2.7-pyinotify)."
+  print >> sys.stderr, "\033[31;1mError: Module pyinotify not found. Please install the package 'python2-pyinotify'.\nMaybe this package is called differently in your distribution (e.g. python2.7-pyinotify).\033[0m"
+  sys.exit(1)
+try:
+  import psutil
+except ImportError:
+  print >> sys.stderr, "\033[31;1mError: Module psutil not found. Please install the package 'python2-psutil'.\nMaybe this package is called differently in your distribution (e.g. python2.7-psutil).\033[0m"
   sys.exit(1)
 
-pidfile = '/tmp/experms.pid'
-stdoutfile = sys.path[0] + '/experms.log'
-stderrfile = sys.path[0] + '/experms.err'
+# set default and global variables
+exversion = '0.7'
+debug = False
+daemon = None
+config = None
+restoreerror = 0
+allcounts = None
+uid = os.geteuid()
+pidfile = '/tmp/experms_' + str(uid) + '.pid'
+if uid == 0:
+  stdoutfile = '/var/log/experms.log'
+  stderrfile = '/var/log/experms.err'
+else:
+  home = os.path.expanduser("~")
+  stdoutfile = home + '/.experms.log'
+  stderrfile = home + '/.experms.err'
 
 ## Taken from Sander Marechal
 ## (http://www.jejik.com/articles/2007/02/a_simple_unix_linux_daemon_in_python/)
@@ -88,40 +111,26 @@ class MyDaemon(Daemon):
     """
     Start the daemon
     """
-    # Check for a pidfile to see if the daemon already runs
-    try:
-      pf = file(self.pidfile,'r')
-      pid = int(pf.read().strip())
-      pf.close()
-    except IOError:
-      pid = None
 
-    # check with PID if experms really is running
-    if pid:
-      if checkpid(pid) == True:
-        message = "pidfile %s already exist. Experms already running?\n"
-        sys.stderr.write(message % self.pidfile)
-        sys.exit(1)
-      os.remove(self.pidfile)
+    # check if experms is already running
+    isrunning = checkpid()
+    if not isrunning == False:
+      sys.stderr.write("Experms is already running with PID %s\n" % isrunning)
+      sys.exit(1)
     # load the configuration
     config = self.loadconfig()
     if config.restore == 'yes':
-      stdout.write("Restore is in progress...")
       restore()
-      stdout.write(" Done.\n")
-      stdout.flush()
-      restorelogcount = saferestorelog()
-      print restorelogcount, 'files have been changed.'
-    print "Experms daemon started."
+    dircount()
+    print "\033[32;1mExperms daemon started.\033[0m"
     # Start the daemon
     self.daemonize()
     self.run()
 
   def loadconfig(self):
     global config
-    config = check_config.Check()
+    config = check_config.Check(uid, debug)
     return config
-    #sys.exit(0)
     
   def run(self):
     # do not use IN_MOVED_SELF! It will burn down your house!
@@ -132,28 +141,28 @@ class MyDaemon(Daemon):
     notifier = pyinotify.ThreadedNotifier(wm, MyEventHandler())
     
     # Start the notifier from a new thread, without doing anything as no
-    # directory or file are currently monitored yet.
+    # directory or file is currently monitored yet.
     notifier.start()
-    # Start watching a path
+    # Start watching the paths
     wdd = wm.add_watch(config.dirname, mask, rec=True, auto_add=True)
     
-    # user input
+    # handle quit when running in foreground
     try:
       while True:
-        time.sleep(0.05)
+        sleep(0.05)
     except KeyboardInterrupt:
       # happens when the user presses ctrl-c
-      print("\nBye-bye!")
       wm.rm_watch(wdd.values())
       notifier.stop()
+      print("\nBye-bye!")
       sys.exit(0)
     except EOFError:
       # happens when the user presses ctrl-d
-      print("\nBye-bye!")
       wm.rm_watch(wdd.values())
       notifier.stop()
-      
+      print("\nBye-bye!")
       sys.exit(0)
+
 
 # Taken from http://www.saltycrane.com/blog/2010/04/monitoring-filesystem-python-and-pyinotify/
 class MyEventHandler(pyinotify.ProcessEvent):
@@ -170,7 +179,6 @@ class MyEventHandler(pyinotify.ProcessEvent):
         prepare(event.pathname, "IN_CLOSE_WRITE")
 
     def process_IN_CREATE(self, event):
-        self.olddir = event.pathname
         prepare(event.pathname, "CREATE")
 
     def process_IN_DELETE(self, event):
@@ -189,18 +197,15 @@ class MyEventHandler(pyinotify.ProcessEvent):
         prepare(event.pathname, "IN_MOVED_TO")
 
 def prepare(directory, event=None, restore=False):
-  #print 'directory:', directory
-  #print 'event:', event
+  if debug == True:
+    print '[DEBUG] ' + strftime("%Y-%m-%d_%H:%M:%S", localtime()) + "%.20f" % time() + ' event to process:', event, directory
+    
   dirhighest = 0
   for nr, item in enumerate(config.dirname):
-    #if item == directory:
-      #continue
     tempdirhighest = 0
     if not item in directory:
       continue
     for count, thing in enumerate(directory.split('/')):
-      #if thing == directory:
-        #continue
       try:
         item.split('/')[count]
       except IndexError:
@@ -214,7 +219,7 @@ def prepare(directory, event=None, restore=False):
   # check if the file is excluded or what rules have to take effect
   if not config.excludepattern[nr] == None:
     if os.path.isfile(directory):
-      p = re.compile(config.excludepattern[nr])
+      p = re_compile(config.excludepattern[nr])
       if p.search(os.path.basename(directory)):
         return
   if config.excludedir[nr] == None:
@@ -243,12 +248,14 @@ def prepare(directory, event=None, restore=False):
 # collects all the filenames in the monitored directories
 # returns a list: [[filenames],[dirnames],[allnames],count]
 def collect_filenames():
+  sys.stdout.write("Counting directories...")
+  
   realdirs = []
   for item in config.dirname:
     doappend = True
     for thing in config.dirname:
       if not item == thing:
-        p = re.compile('^' + thing + '/')
+        p = re_compile('^' + thing + '/')
         if p.search(item):
           doappend = False
           break
@@ -272,25 +279,80 @@ def collect_filenames():
   for thing in realdirs:
     matchesdir.append(thing)
     matchesall.append(thing)
+  sys.stdout.write(" Done.\n")
+  sys.stdout.flush()
   return [matchesfile,matchesdir,matchesall,len(matchesdir)]
 
+def dircount():
+  global allcounts
+  
+  if allcounts == None:
+    allcounts = collect_filenames()
+  
+  inotifynumber = check_inotify_config()
+  print "Total count of directories (including subdirectories) you have configured to monitor:"
+  print "\033[32;1m" + str(allcounts[3]) + "\033[0m"
+  print "Amount of allowed directories to watch per user (inotify):"
+  print "\033[32;1m" + str(inotifynumber) + "\033[0m"
+  if allcounts[3] > int(inotifynumber) or allcounts[3] == int(inotifynumber):
+    if uid == 0:
+      print >> sys.stderr, "\033[31;1mYou need to edit '/proc/sys/fs/inotify/max_user_watches', in order to allow more directories to watch.\nTo make this change permanent, the following line should be added to /etc/sysctl.conf\nor /etc/sysctl.d/99-sysctl.conf:\nfs.inotify.max_user_watches=8192 (your amount of directories)\033[0m"
+      sys.exit(1)
+    else:
+      print >> sys.stderr, "\033[31;1mAsk the system-administrator to edit '/proc/sys/fs/inotify/max_user_watches', in order to allow more directories to watch.\nTo make this change permanent, the following line should be added to /etc/sysctl.conf\nor /etc/sysctl.d/99-sysctl.conf:\nfs.inotify.max_user_watches=8192 (your amount of directories)\033[0m"
+      sys.exit(1)
+  elif allcounts[3] > int(inotifynumber) - 2000:
+    if uid == 0:
+      print "\033[31;1mYou have possibly hit your limit of watched directories or will very soon.\nEdit '/proc/sys/fs/inotify/max_user_watches',\nin order to allow more directories to watch.\nTo make this change permanent, the following line should be added to /etc/sysctl.conf\nor /etc/sysctl.d/99-sysctl.conf:\nfs.inotify.max_user_watches=8192 (your amount of directories)\nIf you encounter any problems, check '" + sys.argv[0] + " err' for errors.\033[0m"
+    else:
+       print "\033[31;1mYou have possibly hit your limit of watched directories or will very soon.\nAsk the system-administrator to edit '/proc/sys/fs/inotify/max_user_watches',\nin order to allow more directories to watch.\nTo make this change permanent, the following line should be added to /etc/sysctl.conf\nor /etc/sysctl.d/99-sysctl.conf:\nfs.inotify.max_user_watches=8192 (your amount of directories)\nIf you encounter any problems, check '" + sys.argv[0] + " err' for errors.\033[0m"
+
+def check_inotify_config():
+  with open('/proc/sys/fs/inotify/max_user_watches', 'r') as inotifyconf:
+    return inotifyconf.read().strip()
+
 def restore():
+  global allcounts
   allcounts = collect_filenames()
+  # handle ugly output with debug
+  if debug == True:
+    print "Restore is in progress..."
+  else:
+    sys.stdout.write("Restore is in progress...")
   for item in allcounts[2]:
-    prepare(item, None, True)
+    prepare(item, 'restore', True)
+  if debug == True:
+    print "Done."
+  else:
+    sys.stdout.write(" Done.\n")
+    sys.stdout.flush()
+  try:
+    restorelogcount = saferestorelog()
+  except NameError:
+    restorelogcount = 0
+  print '\033[32;1m' + str(restorelogcount), 'files have been changed.\033[0m'
+  if restoreerror > 0:
+    print "\033[31;1m" + str(restoreerror) + " errors occured.\nCheck '" + sys.argv[0] + " err' for details.\nAborting!\033[0m"
+    sys.exit(1)
 
 def action(directory, event, ruledir, restore):
-  
+  global restoreerror  
   try:
     # use os.lstat instead of os.stat in order to not following symlinks
     actpermsraw = os.lstat(directory)
   except OSError, e:
     if e.errno == 13:
-      print >> sys.stderr, strftime("%Y-%m-%d_%H:%M:%S", localtime()), "Permission denied for '" + directory + "'."
+      errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Permission denied for '" + directory + "'"
+      if not restore == True or debug == True:
+        print >> sys.stderr, errmessage
+      else:
+        with open(stderrfile, "a") as errfile:
+          errfile.write(errmessage + '\n')
+      restoreerror = restoreerror + 1
       return
     elif e.errno == 2:
+      # this means the file/directory doesn't exist anymore
       return
-      #print >> sys.stderr, directory, " doesn't exist."
 
   actperms = [actpermsraw.st_uid, actpermsraw.st_gid, oct(actpermsraw.st_mode & 0777)]
   # change owner and group
@@ -310,11 +372,44 @@ def action(directory, event, ruledir, restore):
         os.lchown(directory, realowner, realgroup)
       except OSError, e:
         if e.errno == 13:
-          print >> sys.stderr, strftime("%Y-%m-%d_%H:%M:%S", localtime()), "Permission denied for '" + directory + "'."
+          errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Permission denied for '" + directory + "'"
+          if not restore == True or debug == True:
+            print >> sys.stderr, errmessage
+          else:
+            with open(stderrfile, "a") as errfile:
+              errfile.write(errmessage + '\n')
+          restoreerror = restoreerror + 1
           return
         elif e.errno == 2:
+          # this means the file/directory doesn't exist anymore
           return
-          #print >> sys.stderr, directory, " doesn't exist."
+        elif e.errno == 1:
+          errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Operation not permitted for '" + directory + "'"
+          if not restore == True or debug == True:
+            print >> sys.stderr, errmessage
+          else:
+            with open(stderrfile, "a") as errfile:
+              errfile.write(errmessage + '\n')
+          restoreerror = restoreerror + 1
+          return
+        else:
+          errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
+          if not restore == True or debug == True:
+            print >> sys.stderr, errmessage
+          else:
+            with open(stderrfile, "a") as errfile:
+              errfile.write(errmessage + '\n')
+          restoreerror = restoreerror + 1
+          return
+      except:
+        errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
+        if not restore == True or debug == True:
+          print >> sys.stderr, errmessage
+        else:
+          with open(stderrfile, "a") as errfile:
+            errfile.write(errmessage + '\n')
+        restoreerror = restoreerror + 1
+        return
       else:
         changed = True
 
@@ -325,11 +420,35 @@ def action(directory, event, ruledir, restore):
           os.chmod(directory, config.chmodf[ruledir])
         except OSError, e:
           if e.errno == 13:
-            print >> sys.stderr, strftime("%Y-%m-%d_%H:%M:%S", localtime()), "Permission denied for '" + directory + "'."
+            errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Permission denied for '" + directory + "'"
+            if not restore == True or debug == True:
+              print >> sys.stderr, errmessage
+            else:
+              with open(stderrfile, "a") as errfile:
+                errfile.write(errmessage + '\n')
+            restoreerror = restoreerror + 1
             return
           elif e.errno == 2:
+            # this means the file/directory doesn't exist anymore
             return
-            #print >> sys.stderr, directory, " doesn't exist."
+          else:
+            errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
+            if not restore == True or debug == True:
+              print >> sys.stderr, errmessage
+            else:
+              with open(stderrfile, "a") as errfile:
+                errfile.write(errmessage + '\n')
+            restoreerror = restoreerror + 1
+            return
+        except:
+          errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
+          if not restore == True or debug == True:
+            print >> sys.stderr, errmessage
+          else:
+            with open(stderrfile, "a") as errfile:
+              errfile.write(errmessage + '\n')
+          restoreerror = restoreerror + 1
+          return
         else:
           changed = True
 
@@ -340,43 +459,75 @@ def action(directory, event, ruledir, restore):
           os.chmod(directory, config.chmodd[ruledir])
         except OSError:
           if e.errno == 13:
-            print >> sys.stderr, strftime("%Y-%m-%d_%H:%M:%S", localtime()), "Permission denied for '" + directory + "'."
+            errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Permission denied for '" + directory + "'"
+            if not restore == True or debug == True:
+              print >> sys.stderr, errmessage
+            else:
+              with open(stderrfile, "a") as errfile:
+                errfile.write(errmessage + '\n')
+            restoreerror = restoreerror + 1
             return
           elif e.errno == 2:
+            # this means the file/directory doesn't exist anymore
             return
-            #print >> sys.stderr, directory, " doesn't exist."
+          else:
+            errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
+            if not restore == True or debug == True:
+              print >> sys.stderr, errmessage
+            else:
+              with open(stderrfile, "a") as errfile:
+                errfile.write(errmessage + '\n')
+            restoreerror = restoreerror + 1
+            return
+        except:
+          errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
+          if not restore == True or debug == True:
+            print >> sys.stderr, errmessage
+          else:
+            with open(stderrfile, "a") as errfile:
+              errfile.write(errmessage + '\n')
+          restoreerror = restoreerror + 1
+          return
         else:
           changed = True
         
   if changed == True:
     if config.logit == 'yes':
-      logging(directory, restore, ruledir)
+      logging(directory, restore, ruledir, event)
     else:
       if 'foreground' == sys.argv[1]:
-        logging(directory, restore, ruledir)
+        logging(directory, restore, ruledir, event)
     
   sys.stdout.flush()
 
-def logging(directory, restore, ruledir):
-  logtext = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + ' ' + 'Section: ' + config.sectionname[ruledir] + ' ' + directory
+def logging(directory, restore, ruledir, event):
+  if not debug:
+    logtext = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + ' Section: ' + config.sectionname[ruledir] + ' Event: ' + event + ' ' + directory
+  else:
+    logtext = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + ' ' + "%.20f" % time() + ' Section: ' + config.sectionname[ruledir] + ' Event: ' + event + ' ' + directory
   if restore == False:
-    if not os.path.isfile(stdoutfile) or not os.path.isfile(stderrfile):
-      daemon.mknewlog()
+    if not 'foreground' == sys.argv[1] and not 'debug' == sys.argv[1]:
+      if not os.path.isfile(stdoutfile):
+        daemon.mknewlog()
+      if not os.path.isfile(stderrfile):
+        daemon.mknewerr()
     print logtext
   else:
-    with open(stdoutfile, "a") as logfile:
-      logfile.write(logtext + '\n')
-    global restorelogcount
-    try:
-      restorelogcount
-    except NameError:
-      restorelogcount = 1
+    if debug == True:
+      print logtext
     else:
-      restorelogcount = restorelogcount + 1
-    saferestorelog(restorelogcount)
+      with open(stdoutfile, "a") as logfile:
+        logfile.write(logtext + '\n')
+      global restorelogcount
+      try:
+        restorelogcount
+      except NameError:
+        restorelogcount = 1
+      else:
+        restorelogcount = restorelogcount + 1
+      saferestorelog(restorelogcount)
 
 # safe the count of processed files by the restore function
-# to call it from daemon.start()
 def saferestorelog(count = None):
   if not count == None:
     global givecountback
@@ -388,21 +539,32 @@ def saferestorelog(count = None):
       givecountback = 0
     return givecountback
 
-# if PID-file exists, check with ps if experms is really running
-def checkpid(pid):
-  import subprocess
-  p = subprocess.Popen(["ps", "-Ao", "pid,fname"], stdout=subprocess.PIPE)
-  out, err = p.communicate()
-  for item in out.split('\n'):
-    tempps = item.strip().split(' ')
-    if tempps == ['PID', 'COMMAND'] or tempps == ['']:
-      continue
-    if tempps[1] == 'experms' and int(tempps[0]) == pid:
-      return True
-  return False
+# if PID-file exists, check with psutil if experms is really running
+def checkpid():
+  # Check for a pidfile to see if the daemon already runs
+  try:
+    pf = file(pidfile,'r')
+    pid = int(pf.read().strip())
+    pf.close()
+  except IOError:
+    pid = None
+  if not pid:
+    return False
+  try:
+    psutil.Process(pid)
+  except psutil._error.NoSuchProcess:
+    os.remove(pidfile)
+    return False
+  else:
+    if psutil.Process(pid).uids.effective == uid and psutil.Process(pid).name == 'experms':
+      return pid
+    else:
+      os.remove(pidfile)
+      return False
+  
 
 def usage(command):
-  print "usage: %s [start|stop|restart|restore|status|log|err|dircount|(help|-h|--help)|foreground]" % command
+  print "usage: %s [start|stop|restart|restore|status|log|err|dircount|(help|-h|--help)|version|foreground|debug [file]]" % command
   print "See 'man experms' or the README file for more information."
 
 # from http://blog.abhijeetr.com/2010/10/changing-process-name-of-python-script.html
@@ -413,46 +575,61 @@ def set_procname(newname):
     buff.value = newname                 #Null terminated string as it should be
     libc.prctl(15, byref(buff), 0, 0, 0) #Refer to "#define" of "/usr/include/linux/prctl.h" for the misterious value 16 & arg[3..5] are zero as the man page says.
 
-if __name__ == "__main__":
+def print_version():
+  print "\033[32;1mExperms v" + exversion + "\033[0m"
+
+def norootwarn():
+  if not uid == 0:
+    print "\033[31;1mYou are about to start experms without root-permissions.\nPlease keep in mind, that this is subject to restrictions. See 'man experms' for more information.\033[0m"
+
+def main():
+  global config
+  global daemon
+  global debug
+  
   set_procname('experms')
   daemon = MyDaemon(pidfile, '/dev/null', stdoutfile, stderrfile)
-  if len(sys.argv) == 2:
+  if len(sys.argv) == 2 or len(sys.argv) == 3:
+    if len(sys.argv) == 3:
+      if not sys.argv[1] == 'debug':
+        print_version()
+        usage(sys.argv[0])
+        sys.exit(1)
     if 'start' == sys.argv[1]:
+      print_version()
+      norootwarn()
       daemon.start()
     elif 'stop' == sys.argv[1]:
+      print_version()
       stoped = daemon.stop()
       if not stoped == False:
-        print "Experms stopped."
+        print "\033[32;1mExperms stopped.\033[0m"
     elif 'restart' == sys.argv[1]:
+      print_version()
       print "Experms is restarting."
+      norootwarn()
       daemon.restart()
     elif 'restore' == sys.argv[1]:
+      print_version()
+      norootwarn()
       config = daemon.loadconfig()
-      stdout.write("Restore is in progress...")
       restore()
-      stdout.write(" Done.\n")
-      stdout.flush()
       try:
         restorelogcount
       except NameError:
         restorelogcount = 0
       print restorelogcount, 'files have been changed.'
     elif 'status' == sys.argv[1]:
-      # Check for a pidfile to see if the daemon already runs
-      try:
-        pf = file(daemon.pidfile,'r')
-        pid = int(pf.read().strip())
-        pf.close()
-      except IOError:
-        pid = None
-      if pid:
-        if checkpid(pid):
-          print "Experms is running with the PID " + str(pid) + "."
-        else:
-          print "Experms is not running."
+      # Check for a pidfile to see if the daemon is running
+      isrunning = checkpid()
+      if not isrunning == False:
+        print "\033[32;1mExperms v" + exversion, "is running with the PID " + str(isrunning) + ".\033[0m"
+        config = daemon.loadconfig()
+        dircount()
       else:
-        print "Experms is not running."
+        print "\033[32;1mExperms v" + exversion, "is not running.\033[0m"
     elif 'log' == sys.argv[1]:
+      print_version()
       if not os.path.isfile(stdoutfile):
         print "There is no logfile to show."
         sys.exit(0)
@@ -466,6 +643,7 @@ if __name__ == "__main__":
       except KeyboardInterrupt:
         sys.exit(0)
     elif 'err' == sys.argv[1]:
+      print_version()
       if not os.path.isfile(stderrfile):
         print "There is no logfile to show."
         sys.exit(0)
@@ -479,35 +657,58 @@ if __name__ == "__main__":
       except KeyboardInterrupt:
         sys.exit(0)
     elif 'dircount' == sys.argv[1]:
+      print_version()
       config = daemon.loadconfig()
-      allcounts = collect_filenames()
-      print "Total count of directories (including subdirectories) you have configured to monitor:"
-      print allcounts[3]
+      dircount()
     elif '-h' == sys.argv[1] or '--help' == sys.argv[1] or 'help' == sys.argv[1]:
+      print_version()
       usage(sys.argv[0])
       sys.exit(0)
-    elif 'foreground' == sys.argv[1]:
+    elif 'version' == sys.argv[1]:
+      print_version()
+    elif 'foreground' == sys.argv[1] or 'debug' == sys.argv[1]:
+      if 'debug' == sys.argv[1]:
+        debug = True
+        if len(sys.argv) == 3:
+          print_version()
+          print 'Starting experms in debug mode.'
+          print 'All output will be written to' + sys.argv[2]
+          print 'Press Ctrl+c to exit.'
+          try:
+            dfile = open(sys.argv[2], 'a+', 0)
+            os.dup2(dfile.fileno(), sys.stdout.fileno())
+            os.dup2(dfile.fileno(), sys.stderr.fileno())
+          except IOError:
+            print "not a file"
+            sys.exit(1)
+      print_version()
+      norootwarn()
+      
+      # Check for a pidfile to see if the daemon is running
+      isrunning = checkpid()
+      if not isrunning == False:
+        sys.stderr.write("Experms is already running with PID %s\n" % isrunning)
+        sys.exit(1)
+      
       config = daemon.loadconfig()
+      
       if config.restore == 'yes':
-        stdout.write("Restore is in progress...")
         restore()
-        stdout.write(" Done.\n")
-        stdout.flush()
-      try:
-        restorelogcount
-      except NameError:
-        restorelogcount = 0
-      print restorelogcount, 'files have been changed.'
+      
+      dircount()
       print "Experms started in foreground.\nPress ctrl+c to exit."
       daemon.run()
     else:
+      print_version()
       print >> sys.stderr, "Unknown command"
       usage(sys.argv[0])
-      sys.exit(2)
+      sys.exit(1)
     sys.exit(0)
   else:
+    print_version()
     usage(sys.argv[0])
-    sys.exit(2)
-else:
-  usage(sys.argv[0])
-  sys.exit(2)
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+  main()
