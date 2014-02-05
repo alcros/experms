@@ -12,7 +12,7 @@
 ##  // //    \  //\  //\  //\  //\  //\  //    \  \
 ##  \_//      \//  \//  \//  \//  \//  \//      \_//
 ##
-##                 version 0.7 - 2013
+##                 version 0.8 - 2013
 ##
 
 
@@ -24,7 +24,7 @@
 ##
 ##       AUTHOR: Fabio Rämi - fabio(a)dynamix-tontechnik.ch
 ##
-##      VERSION: 0.7
+##      VERSION: 0.8
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -46,6 +46,7 @@
 ##               along with Experms.  If not, see <http://www.gnu.org/licenses/>.
 ##
 ##      CREATED: 2013
+##               2014
 ##
 ##===========================================================================================================================
 
@@ -86,6 +87,24 @@ def checkoctalperms(octalperms, chmodfd, i, debug):
     return True
 
 class Check(object):
+  """
+  Read the configfile and return the values:
+  restore = boolean
+  logit = boolean
+  sectionname = ['section1','section2','section3']
+  dirname = ['dir1','dir2','dir3']
+  owner = ['own1','own2','own3']
+  group = ['grp1','grp2','grp3']
+  chmodf = ['oct1','oct2','oct3']
+  chmodd = ['oct1','oct2','oct3']
+  excludedir = ['excludedir1','excludedir2','excludedir3']
+  excludepattern = ['regex1','regex2','regex3']
+  doit = ['oct1','oct2','oct3']
+  The list 'doit' contains octal value:
+  1 = chown
+  2 = chmodf
+  4 = chmodd
+  """
   def __init__(self, uid, debug):
     # variable names from the configfile
     log_activities = 'log_activities'

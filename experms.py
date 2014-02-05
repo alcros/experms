@@ -12,18 +12,18 @@
 ##  // //    \  //\  //\  //\  //\  //\  //    \  \
 ##  \_//      \//  \//  \//  \//  \//  \//      \_//
 ##
-##                 version 0.7 - 2013
+##                 version 0.8 - 2013
 ##
 
 ##=================================================================================================================================
 ##
 ##         FILE: experms.py
 ##
-##        USAGE: experms.py [start|stop|restart|restore|status|log|err|dircount|-h|foreground]
+##        USAGE: experms.py [start|stop|restart|restore|status|log|err|dircount|(help|-h|--help)|version|foreground|debug [file]]
 ##
 ##  DESCRIPTION: Runs as daemon and monitors file-changes happened in the directory set in experms.conf.
 ##               If changes happened, it adjusts the file-permissions and ownership/group.
-##               You can either define one directory, or several sub-directories with different
+##               You can either define one directory, or several directories with different
 ##               ownerships and permissions.
 ##               It also allows exclusions based on directories or patterns (regex).
 ##               Further it is able to restore all the ownerships and permissions of all files based on
@@ -36,13 +36,15 @@
 ##
 ##        NOTES: Experms uses inotify to monitor the directories.
 ##               Inotify allows only a limited number of directories to watch per user. Per default this is set to 8192.
-##               You can increase this number by writing to /proc/sys/fs/inotify/max_user_watches.
+##               You can increase this number by writing to /proc/sys/fs/inotify/max_user_watches
+##               To make this change permanent, the following line should be added to (depending on
+##               your setup) /etc/sysctl.conf or /etc/sysctl.d/99-sysctl.conf
 ##               You can check the number of directories recursively with:
 ##               'experms.py dircount'
 ##
-##       AUTHOR: Fabio Rämi - fabio(a)dynamix-tontechnik.ch
+##       AUTHOR: Fabio Rämi - fabio(at)dynamix-tontechnik(dot)ch
 ##
-##      VERSION: 0.7
+##      VERSION: 0.8
 ##
 ##      LICENCE: GNU GPL v3.0 or later.
 ##               http://www.gnu.org/licenses/gpl-3.0.txt
@@ -62,6 +64,7 @@
 ##               along with Experms.  If not, see <http://www.gnu.org/licenses/>.
 ##
 ##      CREATED: 2013
+##               2014
 ##
 ##=================================================================================================================================
 
@@ -88,7 +91,7 @@ except ImportError:
   sys.exit(1)
 
 # set default and global variables
-exversion = '0.7'
+exversion = '0.8'
 debug = False
 daemon = None
 config = None
@@ -104,9 +107,11 @@ else:
   stdoutfile = home + '/.experms.log'
   stderrfile = home + '/.experms.err'
 
-## Taken from Sander Marechal
-## (http://www.jejik.com/articles/2007/02/a_simple_unix_linux_daemon_in_python/)
 class MyDaemon(Daemon):
+  """
+  Taken from Sander Marechal
+  (http://www.jejik.com/articles/2007/02/a_simple_unix_linux_daemon_in_python/)
+  """
   def start(self):
     """
     Start the daemon
@@ -133,6 +138,9 @@ class MyDaemon(Daemon):
     return config
     
   def run(self):
+    """
+    Start pyinotify
+    """
     # do not use IN_MOVED_SELF! It will burn down your house!
     mask = pyinotify.IN_CREATE | pyinotify.IN_MODIFY | pyinotify.IN_ATTRIB | pyinotify.IN_MOVED_TO # watched events
     
@@ -163,40 +171,60 @@ class MyDaemon(Daemon):
       print("\nBye-bye!")
       sys.exit(0)
 
-
-# Taken from http://www.saltycrane.com/blog/2010/04/monitoring-filesystem-python-and-pyinotify/
 class MyEventHandler(pyinotify.ProcessEvent):
-    def process_IN_ACCESS(self, event):
-        print "ACCESS event:", event.pathname
+  """
+  Taken from http://www.saltycrane.com/blog/2010/04/monitoring-filesystem-python-and-pyinotify/
+  """
+  def process_IN_ACCESS(self, event):
+    # not watched
+    pass
 
-    def process_IN_ATTRIB(self, event):
-        prepare(event.pathname, "ATTRIB")
+  def process_IN_ATTRIB(self, event):
+    prepare(event.pathname, "ATTRIB")
 
-    def process_IN_CLOSE_NOWRITE(self, event):
-        print "CLOSE_NOWRITE event:", event.pathname
+  def process_IN_CLOSE_NOWRITE(self, event):
+    # not watched
+    pass
 
-    def process_IN_CLOSE_WRITE(self, event):
-        prepare(event.pathname, "IN_CLOSE_WRITE")
+  def process_IN_CLOSE_WRITE(self, event):
+    # not watched
+    pass
 
-    def process_IN_CREATE(self, event):
-        prepare(event.pathname, "CREATE")
+  def process_IN_CREATE(self, event):
+    prepare(event.pathname, "CREATE")
 
-    def process_IN_DELETE(self, event):
-        print "DELETE event:", event.pathname
+  def process_IN_DELETE(self, event):
+    # not watched
+    pass
 
-    def process_IN_MODIFY(self, event):
-        prepare(event.pathname, "MODIFY")
+  def process_IN_MODIFY(self, event):
+    prepare(event.pathname, "MODIFY")
 
-    def process_IN_OPEN(self, event):
-        print "OPEN event:", event.pathname
+  def process_IN_OPEN(self, event):
+    # not watched
+    pass
 
-    def process_IN_MOVE_SELF(self, event):
-        prepare(event.pathname, "IN_MOVE_SELF")
-        
-    def process_IN_MOVED_TO(self, event):
-        prepare(event.pathname, "IN_MOVED_TO")
+  def process_IN_MOVE_SELF(self, event):
+    # not watched
+    pass
+      
+  def process_IN_MOVED_TO(self, event):
+    prepare(event.pathname, "IN_MOVED_TO")
+    # handle all nested files in event.filename
+    for root, dirnames, filenames in os.walk(event.pathname):
+      for filename in filenames:
+        filenamewrite = os.path.join(root, filename)
+        prepare(filenamewrite, "IN_MOVED_TO")
+      for dirname in dirnames:
+        dirnamewrite = os.path.join(root, dirname)
+        prepare(dirnamewrite, "IN_MOVED_TO")
 
 def prepare(directory, event=None, restore=False):
+  """
+  Prepare everything:
+   - Check what rule has to be applied
+   - Check if the file is excluded
+  """
   if debug == True:
     print '[DEBUG] ' + strftime("%Y-%m-%d_%H:%M:%S", localtime()) + "%.20f" % time() + ' event to process:', event, directory
     
@@ -245,9 +273,11 @@ def prepare(directory, event=None, restore=False):
 
   action(directory, event, ruledir, restore)
 
-# collects all the filenames in the monitored directories
-# returns a list: [[filenames],[dirnames],[allnames],count]
 def collect_filenames():
+  """
+  collects all the filenames in the monitored directories
+  returns an array: [[filenames],[dirnames],[allnames],count]
+  """
   sys.stdout.write("Counting directories...")
   
   realdirs = []
@@ -284,6 +314,9 @@ def collect_filenames():
   return [matchesfile,matchesdir,matchesall,len(matchesdir)]
 
 def dircount():
+  """
+  outputs the file count alongside the inotify limit.
+  """
   global allcounts
   
   if allcounts == None:
@@ -294,7 +327,7 @@ def dircount():
   print "\033[32;1m" + str(allcounts[3]) + "\033[0m"
   print "Amount of allowed directories to watch per user (inotify):"
   print "\033[32;1m" + str(inotifynumber) + "\033[0m"
-  if allcounts[3] > int(inotifynumber) or allcounts[3] == int(inotifynumber):
+  if allcounts[3] >= int(inotifynumber):
     if uid == 0:
       print >> sys.stderr, "\033[31;1mYou need to edit '/proc/sys/fs/inotify/max_user_watches', in order to allow more directories to watch.\nTo make this change permanent, the following line should be added to /etc/sysctl.conf\nor /etc/sysctl.d/99-sysctl.conf:\nfs.inotify.max_user_watches=8192 (your amount of directories)\033[0m"
       sys.exit(1)
@@ -308,10 +341,16 @@ def dircount():
        print "\033[31;1mYou have possibly hit your limit of watched directories or will very soon.\nAsk the system-administrator to edit '/proc/sys/fs/inotify/max_user_watches',\nin order to allow more directories to watch.\nTo make this change permanent, the following line should be added to /etc/sysctl.conf\nor /etc/sysctl.d/99-sysctl.conf:\nfs.inotify.max_user_watches=8192 (your amount of directories)\nIf you encounter any problems, check '" + sys.argv[0] + " err' for errors.\033[0m"
 
 def check_inotify_config():
+  """
+  Check the amount of watchable files in the inotify config
+  """
   with open('/proc/sys/fs/inotify/max_user_watches', 'r') as inotifyconf:
     return inotifyconf.read().strip()
 
 def restore():
+  """
+  Restores all the ownerships and permissions on all files
+  """
   global allcounts
   allcounts = collect_filenames()
   # handle ugly output with debug
@@ -336,6 +375,9 @@ def restore():
     sys.exit(1)
 
 def action(directory, event, ruledir, restore):
+  """
+  Finally do what we're here for.
+  """
   global restoreerror  
   try:
     # use os.lstat instead of os.stat in order to not following symlinks
@@ -356,9 +398,11 @@ def action(directory, event, ruledir, restore):
 
   actperms = [actpermsraw.st_uid, actpermsraw.st_gid, oct(actpermsraw.st_mode & 0777)]
   # change owner and group
-  changed = False
-  # if owner or group is not set in the config, use the actual ones
-  if config.doit[ruledir] == 1 or config.doit[ruledir] == 3 or config.doit[ruledir] == 5 or config.doit[ruledir] == 7:
+  changedchown = False
+  changedchmod = False
+  
+  # do the chowning
+  if config.doit[ruledir] in (1, 3, 5, 7):
     if config.owner[ruledir] == -1:
       realowner = actperms[0]
     else:
@@ -370,8 +414,10 @@ def action(directory, event, ruledir, restore):
     if not actperms[0] == realowner or not actperms[1] == realgroup:
       try:
         os.lchown(directory, realowner, realgroup)
+        changedchown = True
       except OSError, e:
         if e.errno == 13:
+          changedchown = False
           errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Permission denied for '" + directory + "'"
           if not restore == True or debug == True:
             print >> sys.stderr, errmessage
@@ -384,6 +430,7 @@ def action(directory, event, ruledir, restore):
           # this means the file/directory doesn't exist anymore
           return
         elif e.errno == 1:
+          changedchown = False
           errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Operation not permitted for '" + directory + "'"
           if not restore == True or debug == True:
             print >> sys.stderr, errmessage
@@ -393,6 +440,7 @@ def action(directory, event, ruledir, restore):
           restoreerror = restoreerror + 1
           return
         else:
+          changedchown = False
           errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
           if not restore == True or debug == True:
             print >> sys.stderr, errmessage
@@ -402,6 +450,7 @@ def action(directory, event, ruledir, restore):
           restoreerror = restoreerror + 1
           return
       except:
+        changedchown = False
         errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
         if not restore == True or debug == True:
           print >> sys.stderr, errmessage
@@ -410,88 +459,52 @@ def action(directory, event, ruledir, restore):
             errfile.write(errmessage + '\n')
         restoreerror = restoreerror + 1
         return
+
+  # do the chmodding
+  try:
+    if os.path.isfile(directory) and config.doit[ruledir] in (2, 3, 6, 7) and not os.path.islink(directory) and not int(actperms[2], 8) == config.chmodf[ruledir]:
+      os.chmod(directory, config.chmodf[ruledir])
+      changedchmod = True
+    elif os.path.isdir(directory) and config.doit[ruledir] in (4, 5, 6, 7) and not os.path.islink(directory) and not int(actperms[2], 8) == config.chmodd[ruledir]:
+      os.chmod(directory, config.chmodd[ruledir])
+      changedchmod = True
+  except OSError, e:
+    if e.errno == 13:
+      changedchmod = False
+      errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Permission denied for '" + directory + "'"
+      if not restore == True or debug == True:
+        print >> sys.stderr, errmessage
       else:
-        changed = True
+        with open(stderrfile, "a") as errfile:
+          errfile.write(errmessage + '\n')
+      restoreerror = restoreerror + 1
+      return
+    elif e.errno == 2:
+      # this means the file/directory doesn't exist anymore
+      return
+    else:
+      changedchmod = False
+      errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
+      if not restore == True or debug == True:
+        print >> sys.stderr, errmessage
+      else:
+        with open(stderrfile, "a") as errfile:
+          errfile.write(errmessage + '\n')
+      restoreerror = restoreerror + 1
+      return
+  except:
+    changedchmod = False
+    errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
+    if not restore == True or debug == True:
+      print >> sys.stderr, errmessage
+    else:
+      with open(stderrfile, "a") as errfile:
+        errfile.write(errmessage + '\n')
+    restoreerror = restoreerror + 1
+    return
 
-  if config.doit[ruledir] == 2 or config.doit[ruledir] == 3 or config.doit[ruledir] == 6 or config.doit[ruledir] == 7:
-    if os.path.isfile(directory) and not os.path.islink(directory):
-      if not int(actperms[2], 8) == config.chmodf[ruledir]:
-        try:
-          os.chmod(directory, config.chmodf[ruledir])
-        except OSError, e:
-          if e.errno == 13:
-            errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Permission denied for '" + directory + "'"
-            if not restore == True or debug == True:
-              print >> sys.stderr, errmessage
-            else:
-              with open(stderrfile, "a") as errfile:
-                errfile.write(errmessage + '\n')
-            restoreerror = restoreerror + 1
-            return
-          elif e.errno == 2:
-            # this means the file/directory doesn't exist anymore
-            return
-          else:
-            errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
-            if not restore == True or debug == True:
-              print >> sys.stderr, errmessage
-            else:
-              with open(stderrfile, "a") as errfile:
-                errfile.write(errmessage + '\n')
-            restoreerror = restoreerror + 1
-            return
-        except:
-          errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
-          if not restore == True or debug == True:
-            print >> sys.stderr, errmessage
-          else:
-            with open(stderrfile, "a") as errfile:
-              errfile.write(errmessage + '\n')
-          restoreerror = restoreerror + 1
-          return
-        else:
-          changed = True
-
-  if config.doit[ruledir] == 4 or config.doit[ruledir] == 5 or config.doit[ruledir] == 6 or config.doit[ruledir] == 7:
-    if os.path.isdir(directory) and not os.path.islink(directory):
-      if not int(actperms[2], 8) == config.chmodd[ruledir]:
-        try:
-          os.chmod(directory, config.chmodd[ruledir])
-        except OSError:
-          if e.errno == 13:
-            errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " Permission denied for '" + directory + "'"
-            if not restore == True or debug == True:
-              print >> sys.stderr, errmessage
-            else:
-              with open(stderrfile, "a") as errfile:
-                errfile.write(errmessage + '\n')
-            restoreerror = restoreerror + 1
-            return
-          elif e.errno == 2:
-            # this means the file/directory doesn't exist anymore
-            return
-          else:
-            errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
-            if not restore == True or debug == True:
-              print >> sys.stderr, errmessage
-            else:
-              with open(stderrfile, "a") as errfile:
-                errfile.write(errmessage + '\n')
-            restoreerror = restoreerror + 1
-            return
-        except:
-          errmessage = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + " An unexpeted Error occured for '" + directory + "'"
-          if not restore == True or debug == True:
-            print >> sys.stderr, errmessage
-          else:
-            with open(stderrfile, "a") as errfile:
-              errfile.write(errmessage + '\n')
-          restoreerror = restoreerror + 1
-          return
-        else:
-          changed = True
-        
-  if changed == True:
+  # do the logging
+  if True in [changedchown, changedchmod]:
     if config.logit == 'yes':
       logging(directory, restore, ruledir, event)
     else:
@@ -501,6 +514,9 @@ def action(directory, event, ruledir, restore):
   sys.stdout.flush()
 
 def logging(directory, restore, ruledir, event):
+  """
+  writes the logfile
+  """
   if not debug:
     logtext = strftime("%Y-%m-%d_%H:%M:%S", localtime()) + ' Section: ' + config.sectionname[ruledir] + ' Event: ' + event + ' ' + directory
   else:
@@ -527,8 +543,11 @@ def logging(directory, restore, ruledir, event):
         restorelogcount = restorelogcount + 1
       saferestorelog(restorelogcount)
 
-# safe the count of processed files by the restore function
 def saferestorelog(count = None):
+  """
+  safe the count of processed files by the restore function
+  to output it in the end
+  """
   if not count == None:
     global givecountback
     givecountback = count
@@ -539,9 +558,11 @@ def saferestorelog(count = None):
       givecountback = 0
     return givecountback
 
-# if PID-file exists, check with psutil if experms is really running
 def checkpid():
-  # Check for a pidfile to see if the daemon already runs
+  """
+  Check for a pidfile to see if the daemon already runs
+  If PID-file exists, check with psutil if experms is really running
+  """
   try:
     pf = file(pidfile,'r')
     pid = int(pf.read().strip())
@@ -567,13 +588,16 @@ def usage(command):
   print "usage: %s [start|stop|restart|restore|status|log|err|dircount|(help|-h|--help)|version|foreground|debug [file]]" % command
   print "See 'man experms' or the README file for more information."
 
-# from http://blog.abhijeetr.com/2010/10/changing-process-name-of-python-script.html
 def set_procname(newname):
-    from ctypes import cdll, byref, create_string_buffer
-    libc = cdll.LoadLibrary('libc.so.6')    #Loading a 3rd party library C
-    buff = create_string_buffer(len(newname)+1) #Note: One larger than the name (man prctl says that)
-    buff.value = newname                 #Null terminated string as it should be
-    libc.prctl(15, byref(buff), 0, 0, 0) #Refer to "#define" of "/usr/include/linux/prctl.h" for the misterious value 16 & arg[3..5] are zero as the man page says.
+  """
+  Change the name of the process to 'experms'
+  from http://blog.abhijeetr.com/2010/10/changing-process-name-of-python-script.html
+  """
+  from ctypes import cdll, byref, create_string_buffer
+  libc = cdll.LoadLibrary('libc.so.6')    #Loading a 3rd party library C
+  buff = create_string_buffer(len(newname)+1) #Note: One larger than the name (man prctl says that)
+  buff.value = newname                 #Null terminated string as it should be
+  libc.prctl(15, byref(buff), 0, 0, 0) #Refer to "#define" of "/usr/include/linux/prctl.h" for the misterious value 16 & arg[3..5] are zero as the man page says.
 
 def print_version():
   print "\033[32;1mExperms v" + exversion + "\033[0m"
@@ -626,8 +650,10 @@ def main():
         print "\033[32;1mExperms v" + exversion, "is running with the PID " + str(isrunning) + ".\033[0m"
         config = daemon.loadconfig()
         dircount()
+        sys.exit(0)
       else:
         print "\033[32;1mExperms v" + exversion, "is not running.\033[0m"
+        sys.exit(1)
     elif 'log' == sys.argv[1]:
       print_version()
       if not os.path.isfile(stdoutfile):
@@ -672,14 +698,14 @@ def main():
         if len(sys.argv) == 3:
           print_version()
           print 'Starting experms in debug mode.'
-          print 'All output will be written to' + sys.argv[2]
+          print 'All output will be written to ' + sys.argv[2]
           print 'Press Ctrl+c to exit.'
           try:
             dfile = open(sys.argv[2], 'a+', 0)
             os.dup2(dfile.fileno(), sys.stdout.fileno())
             os.dup2(dfile.fileno(), sys.stderr.fileno())
           except IOError:
-            print "not a file"
+            print "\033[31;1mError opening " + sys.argv[2] + "!\033[0m"
             sys.exit(1)
       print_version()
       norootwarn()

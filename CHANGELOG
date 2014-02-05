@@ -1,5 +1,10 @@
 Experms changelog
 
+Version 0.8
+ - Tidying the code
+ - Many bugfixes
+ - 'experms status' will now exit with non-zero exit-code if it's not running (usefull to restart it with logrotate)
+
 Version 0.7 - 2013-11-25
  - Support multiple instances (one per user)
  - The logs are written to /var/log/ if executed as root. If executed as normal user they lie in ~/
